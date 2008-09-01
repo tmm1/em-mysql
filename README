@@ -1,0 +1,28 @@
+Async MySQL driver for Ruby/EventMachine
+  (c) 2008 Aman Gupta (tmm1)
+
+
+Requires mysqlplus and the EM.attach patch.
+
+  require 'em/mysql'
+
+  # alias SQL for simpler syntax
+
+  SQL = EventedMysql
+  def SQL(query, &blk) SQL.select(query, &blk) end
+
+  
+  # setup connection details and allow 4 connections to the server
+
+  SQL.settings.update :host => 'localhost',
+                      :port => 3306,
+                      :database => 'test',
+                      :connections => 4
+  
+
+  # use 4 connections to execute queries in parallel
+
+  SQL('select sleep(0.25)'){ p 'done' }
+  SQL('select sleep(0.25)'){ p 'done' }
+  SQL('select sleep(0.25)'){ p 'done' }
+  SQL('select sleep(0.25)'){ p 'done' }
