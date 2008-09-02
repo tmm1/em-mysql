@@ -2,6 +2,12 @@ require 'rubygems'
 require 'eventmachine'
 require 'mysqlplus'
 
+module EventMachine
+  class << self
+    alias attach_fd attach_file
+  end if method_defined?(:attach_file)
+end
+
 class EventedMysql < EM::Connection
   def initialize mysql, opts
     @mysql = mysql
@@ -54,7 +60,7 @@ class EventedMysql < EM::Connection
     EM.next_tick do
       @processing = false
       @mysql = EventedMysql._connect @opts
-      @signature = EM.attach_file @mysql.socket, EM::AttachInNotifyReadableMode, EM::AttachInWriteMode
+      @signature = EM.attach_fd @mysql.socket, EM::AttachInNotifyReadableMode, EM::AttachInWriteMode
       EM.instance_variable_get('@conns')[@signature] = self
     end unless $! # no reconnect if ruby process is exiting.
   end
