@@ -216,6 +216,14 @@ if __FILE__ == $0 and require 'em/spec'
         done
       }
     end
+
+    should 'reconnect when disconnected' do
+      @mysql.close
+      @mysql.execute('select 1+2'){
+        :connected.should == :connected
+        done
+      }
+    end
   
     should 'run select queries and return results' do
       @mysql.execute('select 1+2', :select){ |res|
