@@ -257,6 +257,17 @@ if __FILE__ == $0 and require 'em/spec'
         done
       }
     end
+
+    #
+    # to test, run:
+    #   mysqladmin5 -u root kill `mysqladmin5 -u root processlist | grep "select sleep(5)+1" | cut -d'|' -f2`
+    #
+    # should 're-run query if disconnected during query' do
+    #   @mysql.execute('select sleep(5)+1', :select){ |res|
+    #     res.first['sleep(5)+1'].should == '1'
+    #     done
+    #   }
+    # end
   
     should 'run select queries and return results' do
       @mysql.execute('select 1+2', :select){ |res|
