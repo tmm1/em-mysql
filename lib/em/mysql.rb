@@ -33,7 +33,7 @@ class EventedMysql < EM::Connection
   def notify_readable
     if item = @queue.shift
       start, response, sql, blk = item
-      # p [@mysql.socket, sql, 'took', Time.now-start, 'seconds']
+      log 'mysql response', Time.now-start, sql
       res = case response
             when :select
               @mysql.get_result
@@ -52,9 +52,11 @@ class EventedMysql < EM::Connection
             end
 
       blk.call res if blk
+    else
+      log 'readable, but nothing queued?! probably an ERROR state'
     end
   rescue Mysql::Error => e
-    p ['mysql error', e.message]
+    log 'mysql error', e.message
     if DisconnectErrors.include? e.message
       @pending << [response, sql, blk]
       close
@@ -68,31 +70,34 @@ class EventedMysql < EM::Connection
   end
 
   def unbind
-    # p ['mysql disconnect']
+    log 'mysql disconnect', $!
     cp = EventedMysql.instance_variable_get('@connection_pool') and cp.delete(self)
+    @connected = false
 
     # XXX wait for the next tick, so the FD is removed completely from the reactor
     # XXX in certain cases the new FD# (@mysql.socket) is the same as the old, since FDs are re-used
     # XXX without next_tick in these cases, unbind will get fired on the newly attached signature as well
     EM.next_tick do
+      log 'mysql reconnecting'
       @processing = false
       @mysql = EventedMysql._connect @opts
       @signature = EM.attach_fd @mysql.socket, EM::AttachInNotifyReadableMode, EM::AttachInWriteMode
       EM.instance_variable_get('@conns')[@signature] = self
-    end unless $! # no reconnect if ruby process is exiting.
+    end
   end
 
   def execute sql, response = nil, &blk
     begin
       unless @processing
         @processing = true
+        log 'mysql sending', sql
         @mysql.send_query(sql)
-        # p [@mysql.socket, :sent, sql]
       else
         @pending << [response, sql, blk]
         return
       end
     rescue Mysql::Error => e
+      log 'mysql error', e.message
       if DisconnectErrors.include? e.message
         @pending << [response, sql, blk]
         close_connection
@@ -119,6 +124,11 @@ class EventedMysql < EM::Connection
       execute(sql, response, &blk)
     end
   end
+  
+  def log *args
+    return unless @opts[:logging]
+    p args
+  end
 
   public
 
@@ -137,6 +147,8 @@ class EventedMysql < EM::Connection
 
   # stolen from sequel
   def self._connect opts
+    opts = settings.merge(opts)
+
     conn = Mysql.init
     conn.options(Mysql::OPT_LOCAL_INFILE, 'client')
     conn.real_connect(
@@ -157,6 +169,9 @@ class EventedMysql < EM::Connection
     # no longer valid, and it throws a c++ 'bad file descriptor' error
     conn.query('set @@wait_timeout = -1')
 
+    # we handle reconnecting (and reattaching the new fd to EM)
+    conn.reconnect = false
+
     conn.query_with_result = false
     if encoding = opts[:encoding] || opts[:charset]
       conn.query("set character_set_connection = '#{encoding}'")
@@ -166,15 +181,13 @@ class EventedMysql < EM::Connection
       conn.query("set character_set_results = '#{encoding}'")
     end
 
-    # we handle reconnecting (and reattaching the new fd to EM)
-    conn.reconnect = false
     conn
   end
 end
 
 class EventedMysql
   def self.settings
-    @settings ||= { :connections => 4 }
+    @settings ||= { :connections => 4, :logging => false }
   end
 
   def self.execute query, type = nil, &blk
@@ -221,7 +234,8 @@ if __FILE__ == $0 and require 'em/spec'
     should 'create a new connection' do
       @mysql = EventedMysql.connect :host => '127.0.0.1',
                                     :port => 3306,
-                                    :database => 'test'
+                                    :database => 'test',
+                                    :logging => false
 
       @mysql.class.should == EventedMysql
       done
