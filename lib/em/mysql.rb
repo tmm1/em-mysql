@@ -15,10 +15,12 @@ class EventedMysql < EM::Connection
     @queue = []
     @pending = []
     @processing = false
+    @connected = true
   end
   attr_reader :processing
 
   def connection_completed
+    @connected = true
     next_query
   end
 
@@ -104,6 +106,7 @@ class EventedMysql < EM::Connection
   end
   
   def close
+    @connected = false
     @mysql.close
     close_connection
   end
@@ -111,7 +114,7 @@ class EventedMysql < EM::Connection
   private
   
   def next_query
-    if !@processing and pending = @pending.shift
+    if @connected and !@processing and pending = @pending.shift
       response, sql, blk = pending
       execute(sql, response, &blk)
     end
