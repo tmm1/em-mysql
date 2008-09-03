@@ -22,10 +22,16 @@ class EventedMysql < EM::Connection
     next_query
   end
 
+  DisconnectErrors = [
+    'query: not connected',
+    'MySQL server has gone away',
+    'Lost connection to MySQL server during query'
+  ] unless defined? DisconnectErrors
+
   def notify_readable
     if item = @queue.shift
-      start, response, query, blk = item
-      # p [@mysql.socket, query, 'took', Time.now-start, 'seconds']
+      start, response, sql, blk = item
+      # p [@mysql.socket, sql, 'took', Time.now-start, 'seconds']
       res = case response
             when :select
               @mysql.get_result
@@ -45,6 +51,14 @@ class EventedMysql < EM::Connection
 
       blk.call res if blk
     end
+  rescue Mysql::Error => e
+    p ['mysql error', e.message]
+    if DisconnectErrors.include? e.message
+      @pending << [response, sql, blk]
+      close
+    else
+      raise e
+    end
   ensure
     res.free if res.is_a? Mysql::Result
     @processing = false
@@ -52,6 +66,7 @@ class EventedMysql < EM::Connection
   end
 
   def unbind
+    # p ['mysql disconnect']
     cp = EventedMysql.instance_variable_get('@connection_pool') and cp.delete(self)
 
     # XXX wait for the next tick, so the FD is removed completely from the reactor
@@ -64,11 +79,6 @@ class EventedMysql < EM::Connection
       EM.instance_variable_get('@conns')[@signature] = self
     end unless $! # no reconnect if ruby process is exiting.
   end
-
-  DisconnectErrors = [
-    'query: not connected',
-    'MySQL server has gone away'
-  ] unless defined? DisconnectErrors
 
   def execute sql, response = nil, &blk
     begin
