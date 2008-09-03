@@ -138,9 +138,7 @@ class EventedMysql < EM::Connection
     end
 
     conn = _connect(opts)
-
-    # XXX EM.attach should take fd directly
-    EM.attach IO.new(conn.socket), self, conn, opts
+    EM.attach conn.socket, self, conn, opts
   end
 
   self::Mysql = ::Mysql unless defined? self::Mysql
