@@ -83,10 +83,14 @@ class EventedMysql < EM::Connection
     # cp = EventedMysql.instance_variable_get('@connection_pool') and cp.delete(self)
     @connected = false
 
-    # XXX wait for the next tick, so the FD is removed completely from the reactor
+    # XXX wait for the next tick until the current fd is removed completely from the reactor
+    #
     # XXX in certain cases the new FD# (@mysql.socket) is the same as the old, since FDs are re-used
     # XXX without next_tick in these cases, unbind will get fired on the newly attached signature as well
-    EM.next_tick do
+    #
+    # XXX do _NOT_ use EM.next_tick here. if a bunch of sockets disconnect at the same time, we want
+    # XXX reconnects to happen after all the unbinds have been processed
+    EM.add_timer(0) do
       log 'mysql reconnecting'
       @processing = false
       @mysql = EventedMysql._connect @opts
@@ -101,7 +105,7 @@ class EventedMysql < EM::Connection
   def execute sql, response = nil, &blk
     begin
       unless @processing or !@connected
-        @processing = true
+        # @processing = true
         log 'mysql sending', sql
         @mysql.send_query(sql)
       else
@@ -201,7 +205,7 @@ class EventedMysql
   end
 
   def self.execute query, type = nil, &blk
-    unless connection = connection_pool.find{|c| not c.processing }
+    unless nil#connection = connection_pool.find{|c| not c.processing and c.connected }
       @n ||= 0
       connection = connection_pool[@n]
       @n = 0 if (@n+=1) >= connection_pool.size
