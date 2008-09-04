@@ -177,7 +177,7 @@ class EventedMysql < EM::Connection
     # this is especially bad if we're disconnected while EM.attach is
     # still in progress, because by the time it gets to EM, the FD is
     # no longer valid, and it throws a c++ 'bad file descriptor' error
-    conn.query('set @@wait_timeout = -1')
+    conn.query("set @@wait_timeout = #{opts[:timeout] || -1}")
 
     # we handle reconnecting (and reattaching the new fd to EM)
     conn.reconnect = false
