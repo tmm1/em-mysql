@@ -39,9 +39,8 @@ class EventedMysql < EM::Connection
       log 'mysql response', Time.now-start, sql
       res = case response
             when :select
-              @mysql.get_result
               ret = []
-              @mysql.use_result.each_hash{|h| ret << h }
+              @mysql.get_result.each_hash{|h| ret << h }
               ret
             when :update
               @mysql.get_result
@@ -50,8 +49,9 @@ class EventedMysql < EM::Connection
               @mysql.get_result
               @mysql.insert_id
             else
-              @mysql.get_result
-              @mysql.use_result rescue nil
+              ret = @mysql.get_result rescue nil
+              log 'got a result??', ret if ret
+              ret
             end
 
       blk.call res if blk
@@ -179,7 +179,7 @@ class EventedMysql < EM::Connection
     # we handle reconnecting (and reattaching the new fd to EM)
     conn.reconnect = false
 
-    conn.query_with_result = false
+    # conn.query_with_result = false
     if encoding = opts[:encoding] || opts[:charset]
       conn.query("set character_set_connection = '#{encoding}'")
       conn.query("set character_set_client = '#{encoding}'")
