@@ -11,13 +11,16 @@ end
 class EventedMysql < EM::Connection
   def initialize mysql, opts
     @mysql = mysql
+    @fd = mysql.socket
     @opts = opts
     @queue = []
     @pending = []
     @processing = false
     @connected = true
+
+    log 'mysql connected'
   end
-  attr_reader :processing
+  attr_reader :processing, :connected
 
   def connection_completed
     @connected = true
@@ -54,12 +57,13 @@ class EventedMysql < EM::Connection
       blk.call res if blk
     else
       log 'readable, but nothing queued?! probably an ERROR state'
+      return close
     end
   rescue Mysql::Error => e
     log 'mysql error', e.message
     if DisconnectErrors.include? e.message
       @pending << [response, sql, blk]
-      close
+      return close
     else
       raise e
     end
@@ -71,7 +75,7 @@ class EventedMysql < EM::Connection
 
   def unbind
     log 'mysql disconnect', $!
-    cp = EventedMysql.instance_variable_get('@connection_pool') and cp.delete(self)
+    # cp = EventedMysql.instance_variable_get('@connection_pool') and cp.delete(self)
     @connected = false
 
     # XXX wait for the next tick, so the FD is removed completely from the reactor
@@ -81,14 +85,20 @@ class EventedMysql < EM::Connection
       log 'mysql reconnecting'
       @processing = false
       @mysql = EventedMysql._connect @opts
+      @fd = @mysql.socket
+      # puts;
+      # p ['oldsig', @signature]
       @signature = EM.attach_fd @mysql.socket, EM::AttachInNotifyReadableMode, EM::AttachInWriteMode
+      # p ['newsig', @signature]
+      # puts;
+      log 'mysql connected'
       EM.instance_variable_get('@conns')[@signature] = self
     end
   end
 
   def execute sql, response = nil, &blk
     begin
-      unless @processing
+      unless @processing or !@connected
         @processing = true
         log 'mysql sending', sql
         @mysql.send_query(sql)
@@ -100,8 +110,7 @@ class EventedMysql < EM::Connection
       log 'mysql error', e.message
       if DisconnectErrors.include? e.message
         @pending << [response, sql, blk]
-        close_connection
-        return
+        return close
       else
         raise e
       end
@@ -112,8 +121,8 @@ class EventedMysql < EM::Connection
   
   def close
     @connected = false
-    @mysql.close
     close_connection
+    @mysql.close
   end
 
   private
@@ -127,7 +136,7 @@ class EventedMysql < EM::Connection
   
   def log *args
     return unless @opts[:logging]
-    p args
+    p [@fd, (@signature[-4..-1] if @signature), *args]
   end
 
   public
@@ -218,10 +227,11 @@ class EventedMysql
 
   def self.connection_pool
     @connection_pool ||= (1..settings[:connections]).map{ EventedMysql.connect(settings) }
-    (1..(settings[:connections]-@connection_pool.size)).each do
-      @connection_pool << EventedMysql.connect(settings)
-    end unless settings[:connections] == @connection_pool.size
-    @connection_pool
+    # p ['connpool', settings[:connections], @connection_pool.size]
+    # (1..(settings[:connections]-@connection_pool.size)).each do
+    #   @connection_pool << EventedMysql.connect(settings)
+    # end unless settings[:connections] == @connection_pool.size
+    # @connection_pool
   end
 end
 
@@ -256,7 +266,6 @@ if __FILE__ == $0 and require 'em/spec'
       }
     end
 
-    #
     # to test, run:
     #   mysqladmin5 -u root kill `mysqladmin5 -u root processlist | grep "select sleep(5)+1" | cut -d'|' -f2`
     #
