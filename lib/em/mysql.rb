@@ -34,27 +34,32 @@ class EventedMysql < EM::Connection
   ] unless defined? DisconnectErrors
 
   def notify_readable
+    log 'readable'
     if item = @queue.shift
       start, response, sql, blk = item
       log 'mysql response', Time.now-start, sql
-      res = case response
+      arg = case response
             when :select
               ret = []
-              @mysql.get_result.each_hash{|h| ret << h }
+              result = @mysql.get_result
+              result.each_hash{|h| ret << h }
+              log 'mysql result', ret
               ret
             when :update
-              @mysql.get_result
+              result = @mysql.get_result
               @mysql.affected_rows
             when :insert
-              @mysql.get_result
+              result = @mysql.get_result
               @mysql.insert_id
             else
-              ret = @mysql.get_result rescue nil
-              log 'got a result??', ret if ret
-              ret
+              result = @mysql.get_result
+              log 'got a result??', result if result
+              nil
             end
 
-      blk.call res if blk
+      # result.free if result.is_a? Mysql::Result
+      next_query
+      blk.call(arg) if blk
     else
       log 'readable, but nothing queued?! probably an ERROR state'
       return close
@@ -67,10 +72,10 @@ class EventedMysql < EM::Connection
     else
       raise e
     end
-  ensure
-    res.free if res.is_a? Mysql::Result
-    @processing = false
-    next_query
+  # ensure
+  #   res.free if res.is_a? Mysql::Result
+  #   @processing = false
+  #   next_query
   end
 
   def unbind
@@ -86,11 +91,8 @@ class EventedMysql < EM::Connection
       @processing = false
       @mysql = EventedMysql._connect @opts
       @fd = @mysql.socket
-      # puts;
-      # p ['oldsig', @signature]
+
       @signature = EM.attach_fd @mysql.socket, EM::AttachInNotifyReadableMode, EM::AttachInWriteMode
-      # p ['newsig', @signature]
-      # puts;
       log 'mysql connected'
       EM.instance_variable_get('@conns')[@signature] = self
     end
@@ -116,6 +118,7 @@ class EventedMysql < EM::Connection
       end
     end
 
+    log 'queuing', response, sql
     @queue << [Time.now, response, sql, blk]
   end
   
@@ -136,7 +139,7 @@ class EventedMysql < EM::Connection
   
   def log *args
     return unless @opts[:logging]
-    p [@fd, (@signature[-4..-1] if @signature), *args]
+    p [Time.now, @fd, (@signature[-4..-1] if @signature), *args]
   end
 
   public
@@ -288,6 +291,8 @@ if __FILE__ == $0 and require 'em/spec'
 
   EM.describe EventedMysql, 'connection pools' do
 
+    EventedMysql.settings.update :connections => 3
+
     should 'run queries in parallel' do
       n = 0
       EventedMysql.select('select sleep(0.25)'){ n+=1 }
@@ -304,6 +309,10 @@ if __FILE__ == $0 and require 'em/spec'
 
   SQL = EventedMysql
   def SQL(query, &blk) SQL.select(query, &blk) end
+
+  # XXX this should get cleaned up automatically after reactor stops
+  SQL.instance_variable_set('@connection_pool', nil)
+
 
   EM.describe SQL, 'sql api' do
     
