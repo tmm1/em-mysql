@@ -307,21 +307,43 @@ if __FILE__ == $0 and require 'em/spec'
 
   EM.describe SQL, 'sql api' do
     
-    should 'insert and select rows' do
-      SQL.all('use test')
-
+    should 'run a query on all connections' do
+      SQL.all('use test'){
+        :done.should == :done
+        done
+      }
+    end
+    
+    should 'execute queries with no results' do
       SQL.execute('drop table if exists evented_mysql_test'){
         :table_dropped.should == :table_dropped
         SQL.execute('create table evented_mysql_test (id int primary key auto_increment, num int not null)'){
           :table_created.should == :table_created
-          SQL.insert('insert into evented_mysql_test (num) values (10)'){ |id|
-            id.should == 1
-            SQL('select * from evented_mysql_test'){ |res|
-              res.first.should == { 'id' => '1', 'num' => '10' }
-              done
-            }
-          }
+          done
         }
+      }
+    end
+    
+    should 'insert rows and return inserted id' do
+      SQL.insert('insert into evented_mysql_test (num) values (10),(11),(12)'){ |id|
+        id.should == 1
+        done
+      }
+    end
+
+    should 'select rows from the database' do
+      SQL.select('select * from evented_mysql_test'){ |res|
+        res.size.should == 3
+        res.first.should == { 'id' => '1', 'num' => '10' }
+        res.last.should  == { 'id' => '3', 'num' => '12' }
+        done
+      }
+    end
+
+    should 'update rows and return affected rows' do
+      SQL.update('update evented_mysql_test set num = num + 10'){ |changed|
+        changed.should == 3
+        done
       }
     end
 
