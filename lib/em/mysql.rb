@@ -128,8 +128,10 @@ class EventedMysql < EM::Connection
   
   def close
     @connected = false
+    # @mysql.close
+    # IO.pipe
+    # EM.add_timer(0){ close_connection }
     close_connection
-    @mysql.close
   end
 
   private
