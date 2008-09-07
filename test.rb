@@ -1,13 +1,23 @@
 require 'lib/em/mysql'
 
+# EM.kqueue
+# EM.epoll
 EM.run{
+  EM.start_server '127.0.0.1', 12345 do |c|
+    def c.receive_data data
+      p 'sending http response'
+      send_data "hello"
+      close_connection_after_writing
+    end
+  end
+
   SQL = EventedMysql
   def SQL(query, &blk) SQL.select(query, &blk) end
     
   SQL.settings.update :logging => true,
                       :database => 'test',
-                      :connections => 25,
-                      :timeout => 3
+                      :connections => 10,
+                      :timeout => 1
 
   if false
 

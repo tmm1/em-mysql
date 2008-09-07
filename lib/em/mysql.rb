@@ -131,7 +131,9 @@ class EventedMysql < EM::Connection
     # @mysql.close
     # IO.pipe
     # EM.add_timer(0){ close_connection }
-    close_connection
+    # close_connection
+    fd = detach
+    log 'detached fd', fd
   end
 
   private
