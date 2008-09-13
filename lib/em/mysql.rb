@@ -51,6 +51,7 @@ class EventedMysql < EM::Connection
               nil
             end
 
+      @processing = false
       # result.free if result.is_a? Mysql::Result
       next_query
       blk.call(arg) if blk
@@ -99,7 +100,18 @@ class EventedMysql < EM::Connection
   def execute sql, response = nil, &blk
     begin
       unless @processing or !@connected
-        # @processing = true
+        # begin
+        #   log 'mysql ping', @mysql.ping
+        #   # log 'mysql stat', @mysql.stat
+        #   # log 'mysql errno', @mysql.errno
+        # rescue
+        #   log 'mysql ping failed'
+        #   @pending << [response, sql, blk]
+        #   return close
+        # end
+
+        @processing = true
+
         log 'mysql sending', sql
         @mysql.send_query(sql)
       else
