@@ -196,8 +196,16 @@ class EventedMysql < EM::Connection
     # we handle reconnecting (and reattaching the new fd to EM)
     conn.reconnect = false
 
-    # conn.query_with_result = false
+    # By default, MySQL 'where id is null' selects the last inserted id
+    # Turn this off. http://dev.rubyonrails.org/ticket/6778
+    conn.query("set SQL_AUTO_IS_NULL=0")
+
+    # get results for queries
+    conn.query_with_result = true
+
     if encoding = opts[:encoding] || opts[:charset]
+      conn.options(Mysql::SET_CHARSET_NAME, encoding) rescue nil
+      conn.query("set names '#{encoding}'")
       conn.query("set character_set_connection = '#{encoding}'")
       conn.query("set character_set_client = '#{encoding}'")
       conn.query("set character_set_database = '#{encoding}'")
