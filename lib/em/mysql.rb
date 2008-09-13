@@ -308,6 +308,15 @@ if __FILE__ == $0 and require 'em/spec'
         done
       }
     end
+
+    should 'queue up queries and execute them in order' do
+      @mysql.execute('select 1+2', :select)
+      @mysql.execute('select 2+3', :select)
+      @mysql.execute('select 3+4', :select){ |res|
+        res.first['3+4'].should == '7'
+        done
+      }
+    end
   
   end
 
