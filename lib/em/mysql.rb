@@ -64,6 +64,8 @@ class EventedMysql < EM::Connection
     if DisconnectErrors.include? e.message
       @pending << [response, sql, blk]
       return close
+    elsif cb = @opts[:on_error]
+      cb.call(e)
     else
       raise e
     end
@@ -386,6 +388,14 @@ if __FILE__ == $0 and require 'em/spec'
         changed.should == 3
         done
       }
+    end
+
+    should 'fire error callback with exceptions' do
+      SQL.settings.update :on_error => proc{ |e|
+        e.class.should == Mysql::Error
+        done
+      }
+      SQL.select('select 1+ from table'){}
     end
 
   end
