@@ -165,8 +165,11 @@ class EventedMysql < EM::Connection
       raise RuntimeError, 'mysqlplus and EM.attach are required for EventedMysql'
     end
 
-    conn = _connect(opts)
-    EM.attach conn.socket, self, conn, opts
+    if conn = _connect(opts)
+      EM.attach conn.socket, self, conn, opts
+    else
+      EM.add_timer(5){ connect opts }
+    end
   end
 
   self::Mysql = ::Mysql unless defined? self::Mysql
@@ -220,6 +223,7 @@ class EventedMysql < EM::Connection
   rescue Mysql::Error => e
     if cb = opts[:on_error]
       cb.call(e)
+      nil
     else
       raise e
     end
