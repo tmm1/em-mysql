@@ -217,6 +217,12 @@ class EventedMysql < EM::Connection
     end
 
     conn
+  rescue Mysql::Error => e
+    if cb = opts[:on_error]
+      cb.call(e)
+    else
+      raise e
+    end
   end
 end
 
