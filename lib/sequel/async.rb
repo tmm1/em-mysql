@@ -101,26 +101,24 @@ module Sequel
   end
 
   class Model
+    def async_update *args, &cb
+      this.async_update(*args, &cb)
+      set(*args)
+      self
+    end
+
     class << self
-      # async version of Model#insert
-      def async_insert *args, &cb
-        dataset.async_insert(*args, &cb)
-      end
-
-      # async version of Dataset#insert_multi
-      def async_multi_insert *args, &cb
-        dataset.async_multi_insert(*args, &cb)
-      end
-
-      # async version of Model#each
-      def async_each &cb
-        dataset.async_each(&cb)
-      end
-
-      # async version of Model#all
-      # yields an array
-      def async_all &cb
-        dataset.async_all(&cb)
+      [ :async_insert,
+        :async_multi_insert,
+        :async_each,
+        :async_all,
+        :async_update,
+        :async_count ].each do |method|
+        class_eval %[
+          def #{method} *args, &cb
+            dataset.#{method}(*args, &cb)
+          end
+        ]
       end
 
       # async version of Model#[]
@@ -137,14 +135,6 @@ module Sequel
           end
         }
         nil
-      end
-
-      def async_update *args, &cb
-        dataset.async_update(*args, &cb)
-      end
-
-      def async_count &cb
-        dataset.async_count(&cb)
       end
     end
   end
