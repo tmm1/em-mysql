@@ -187,8 +187,12 @@ class EventedMysql < EM::Connection
       opts[:database],
       opts[:port],
       opts[:socket],
-      Mysql::CLIENT_MULTI_RESULTS +
-      Mysql::CLIENT_MULTI_STATEMENTS +
+      0 +
+      # XXX multi results require multiple callbacks to parse
+      # Mysql::CLIENT_MULTI_RESULTS +
+      # Mysql::CLIENT_MULTI_STATEMENTS +
+
+      # XXX this should check for opts[:compression]
       Mysql::CLIENT_COMPRESS
     )
     
