@@ -57,6 +57,11 @@ module Sequel
       nil
     end
 
+    def async_delete &cb
+      ADB.execute delete_sql, &cb
+      nil
+    end
+
     def async_multi_insert *args, &cb
       ADB.execute multi_insert_sql(*args).first, &cb
       nil
@@ -105,6 +110,11 @@ module Sequel
       this.async_update(*args, &cb)
       set(*args)
       self
+    end
+
+    def async_delete &cb
+      this.async_delete(&cb)
+      nil
     end
 
     class << self
