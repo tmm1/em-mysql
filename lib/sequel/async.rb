@@ -67,6 +67,11 @@ module Sequel
       nil
     end
 
+    def async_multi_insert_ignore *args, &cb
+      ADB.execute multi_insert_sql(*args).first.sub(/insert/i, "INSERT IGNORE"), &cb
+      nil
+    end
+
     def async_each *args
       ADB.select(select_sql(*args)) do |rows|
         rows.each{|r|
@@ -120,6 +125,7 @@ module Sequel
     class << self
       [ :async_insert,
         :async_multi_insert,
+        :async_multi_insert_ignore,
         :async_each,
         :async_all,
         :async_update,
