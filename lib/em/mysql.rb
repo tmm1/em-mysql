@@ -14,7 +14,8 @@ class EventedMysql < EM::Connection
 
     log 'mysql connected'
   end
-  attr_reader :processing, :connected
+  attr_reader :processing, :connected, :opts
+  alias :settings :opts
 
   def connection_completed
     @connected = true
@@ -66,6 +67,8 @@ class EventedMysql < EM::Connection
       return close
     elsif cb = @opts[:on_error]
       cb.call(e)
+      @processing = false
+      next_query
     else
       raise e
     end
@@ -335,6 +338,16 @@ if __FILE__ == $0 and require 'em/spec'
       }
     end
   
+    should 'continue processing queries after hitting an error' do
+      @mysql.settings.update :on_error => proc{|e|}
+
+      @mysql.execute('select 1+ from table'){}
+      @mysql.execute('select 1+1 as num', :select){ |res|
+        res[0]['num'].should == '2'
+        done
+      }
+    end
+
   end
 
   EM.describe EventedMysql, 'connection pools' do
