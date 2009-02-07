@@ -182,7 +182,14 @@ class EventedMysql < EM::Connection
     opts = settings.merge(opts)
 
     conn = Mysql.init
+
+    # set encoding _before_ connecting
+    if charset = opts[:charset] || opts[:encoding]
+      conn.options(Mysql::SET_CHARSET_NAME, charset)
+    end
+
     conn.options(Mysql::OPT_LOCAL_INFILE, 'client')
+
     conn.real_connect(
       opts[:host] || 'localhost',
       opts[:user] || 'root',
@@ -216,15 +223,15 @@ class EventedMysql < EM::Connection
     # get results for queries
     conn.query_with_result = true
 
-    if encoding = opts[:encoding] || opts[:charset]
-      conn.options(Mysql::SET_CHARSET_NAME, encoding) rescue nil
-      conn.query("set names '#{encoding}'")
-      conn.query("set character_set_connection = '#{encoding}'")
-      conn.query("set character_set_client = '#{encoding}'")
-      conn.query("set character_set_database = '#{encoding}'")
-      conn.query("set character_set_server = '#{encoding}'")
-      conn.query("set character_set_results = '#{encoding}'")
-    end
+    # if encoding = opts[:encoding] || opts[:charset]
+    #   conn.options(Mysql::SET_CHARSET_NAME, encoding) rescue nil
+    #   conn.query("set names '#{encoding}'")
+    #   conn.query("set character_set_connection = '#{encoding}'")
+    #   conn.query("set character_set_client = '#{encoding}'")
+    #   conn.query("set character_set_database = '#{encoding}'")
+    #   conn.query("set character_set_server = '#{encoding}'")
+    #   conn.query("set character_set_results = '#{encoding}'")
+    # end
 
     conn
   rescue Mysql::Error => e
