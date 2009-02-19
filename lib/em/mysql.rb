@@ -2,6 +2,12 @@ require 'rubygems'
 require 'eventmachine'
 require 'mysqlplus'
 
+class Mysql
+  def result
+    @cur_result
+  end
+end
+
 class EventedMysql < EM::Connection
   def initialize mysql, opts
     @mysql = mysql
@@ -35,6 +41,8 @@ class EventedMysql < EM::Connection
       log 'mysql response', Time.now-start, sql
       arg = case response
             when :raw
+              result = @mysql.get_result
+              @mysql.instance_variable_set('@cur_result', result)
               @mysql
             when :select
               ret = []
@@ -350,7 +358,7 @@ if __FILE__ == $0 and require 'em/spec'
     should 'have raw mode which yields the mysql object' do
       @mysql.execute('select 1+2 as num', :raw){ |mysql|
         mysql.should.is_a? Mysql
-        mysql.get_result.all_hashes.should == [{'num' => '3'}]
+        mysql.result.all_hashes.should == [{'num' => '3'}]
         done
       }
     end
