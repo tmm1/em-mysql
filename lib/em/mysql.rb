@@ -205,9 +205,7 @@ class EventedMysql < EM::Connection
       # XXX multi results require multiple callbacks to parse
       # Mysql::CLIENT_MULTI_RESULTS +
       # Mysql::CLIENT_MULTI_STATEMENTS +
-
-      # XXX this should check for opts[:compression]
-      Mysql::CLIENT_COMPRESS
+      (opts[:compress] == false ? 0 : Mysql::CLIENT_COMPRESS)
     )
     
     # increase timeout so mysql server doesn't disconnect us
@@ -226,16 +224,6 @@ class EventedMysql < EM::Connection
 
     # get results for queries
     conn.query_with_result = true
-
-    # if encoding = opts[:encoding] || opts[:charset]
-    #   conn.options(Mysql::SET_CHARSET_NAME, encoding) rescue nil
-    #   conn.query("set names '#{encoding}'")
-    #   conn.query("set character_set_connection = '#{encoding}'")
-    #   conn.query("set character_set_client = '#{encoding}'")
-    #   conn.query("set character_set_database = '#{encoding}'")
-    #   conn.query("set character_set_server = '#{encoding}'")
-    #   conn.query("set character_set_results = '#{encoding}'")
-    # end
 
     conn
   rescue Mysql::Error => e
