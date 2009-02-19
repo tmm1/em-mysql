@@ -31,9 +31,11 @@ class EventedMysql < EM::Connection
   def notify_readable
     log 'readable'
     if item = @queue.shift
-      start, response, sql, blk = item
+      start, response, sql, cblk, eblk = item
       log 'mysql response', Time.now-start, sql
       arg = case response
+            when :raw
+              @mysql
             when :select
               ret = []
               result = @mysql.get_result
@@ -55,7 +57,7 @@ class EventedMysql < EM::Connection
       @processing = false
       # result.free if result.is_a? Mysql::Result
       next_query
-      blk.call(arg) if blk
+      cblk.call(arg) if cblk
     else
       log 'readable, but nothing queued?! probably an ERROR state'
       return close
@@ -63,9 +65,9 @@ class EventedMysql < EM::Connection
   rescue Mysql::Error => e
     log 'mysql error', e.message
     if DisconnectErrors.include? e.message
-      @pending << [response, sql, blk]
+      @pending << [response, sql, cblk, eblk]
       return close
-    elsif cb = @opts[:on_error]
+    elsif cb = (eblk || @opts[:on_error])
       cb.call(e)
       @processing = false
       next_query
@@ -102,7 +104,9 @@ class EventedMysql < EM::Connection
     end
   end
 
-  def execute sql, response = nil, &blk
+  def execute sql, response = nil, cblk = nil, eblk = nil, &blk
+    cblk ||= blk
+
     begin
       unless @processing or !@connected
         # begin
@@ -120,13 +124,13 @@ class EventedMysql < EM::Connection
         log 'mysql sending', sql
         @mysql.send_query(sql)
       else
-        @pending << [response, sql, blk]
+        @pending << [response, sql, cblk, eblk]
         return
       end
     rescue Mysql::Error => e
       log 'mysql error', e.message
       if DisconnectErrors.include? e.message
-        @pending << [response, sql, blk]
+        @pending << [response, sql, cblk, eblk]
         return close
       else
         raise e
@@ -134,7 +138,7 @@ class EventedMysql < EM::Connection
     end
 
     log 'queuing', response, sql
-    @queue << [Time.now, response, sql, blk]
+    @queue << [Time.now, response, sql, cblk, eblk]
   end
   
   def close
@@ -151,8 +155,8 @@ class EventedMysql < EM::Connection
   
   def next_query
     if @connected and !@processing and pending = @pending.shift
-      response, sql, blk = pending
-      execute(sql, response, &blk)
+      response, sql, cblk, eblk = pending
+      execute(sql, response, cblk, eblk)
     end
   end
   
@@ -249,20 +253,20 @@ class EventedMysql
     @settings ||= { :connections => 4, :logging => false }
   end
 
-  def self.execute query, type = nil, &blk
+  def self.execute query, type = nil, cblk = nil, eblk = nil, &blk
     unless nil#connection = connection_pool.find{|c| not c.processing and c.connected }
       @n ||= 0
       connection = connection_pool[@n]
       @n = 0 if (@n+=1) >= connection_pool.size
     end
 
-    connection.execute(query, type, &blk)
+    connection.execute(query, type, cblk, eblk, &blk)
   end
 
-  %w[ select insert update ].each do |type| class_eval %[
+  %w[ select insert update raw ].each do |type| class_eval %[
 
-    def self.#{type} query, &blk
-      execute query, :#{type}, &blk
+    def self.#{type} query, cblk = nil, eblk = nil, &blk
+      execute query, :#{type}, cblk, eblk, &blk
     end
 
   ] end
@@ -353,6 +357,24 @@ if __FILE__ == $0 and require 'em/spec'
         res[0]['num'].should == '2'
         done
       }
+    end
+
+    should 'have raw mode which yields the mysql object' do
+      @mysql.execute('select 1+2 as num', :raw){ |mysql|
+        mysql.should.is_a? Mysql
+        mysql.get_result.all_hashes.should == [{'num' => '3'}]
+        done
+      }
+    end
+
+    should 'allow custom error callbacks for each query' do
+      @mysql.settings.update :on_error => proc{ should.flunk('default errback invoked') }
+
+      @mysql.execute('select 1+ from table', :select, proc{
+        should.flunk('callback invoked')
+      }, proc{ |e|
+        done
+      })
     end
 
   end
