@@ -442,6 +442,20 @@ if __FILE__ == $0 and require 'em/spec'
       }
     end
 
+    should 'allow access to insert_id in raw mode' do
+      SQL.raw('insert into evented_mysql_test (num) values (20), (21), (22)'){ |mysql|
+        mysql.insert_id.should == 4
+        done
+      }
+    end
+
+    should 'allow access to affected_rows in raw mode' do
+      SQL.raw('update evented_mysql_test set num = num + 10'){ |mysql|
+        mysql.affected_rows.should == 6
+        done
+      }
+    end
+
     should 'fire error callback with exceptions' do
       SQL.settings.update :on_error => proc{ |e|
         e.class.should == Mysql::Error
