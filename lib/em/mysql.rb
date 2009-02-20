@@ -13,8 +13,8 @@ class EventedMysql < EM::Connection
     @mysql = mysql
     @fd = mysql.socket
     @opts = opts
-    @queue = []
-    @pending = []
+    @current = nil
+    @@queue ||= []
     @processing = false
     @connected = true
 
@@ -36,7 +36,8 @@ class EventedMysql < EM::Connection
 
   def notify_readable
     log 'readable'
-    if item = @queue.shift
+    if item = @current
+      @current = nil
       start, response, sql, cblk, eblk = item
       log 'mysql response', Time.now-start, sql
       arg = case response
@@ -73,7 +74,7 @@ class EventedMysql < EM::Connection
   rescue Mysql::Error => e
     log 'mysql error', e.message
     if DisconnectErrors.include? e.message
-      @pending << [response, sql, cblk, eblk]
+      @@queue << [response, sql, cblk, eblk]
       return close
     elsif cb = (eblk || @opts[:on_error])
       cb.call(e)
@@ -123,7 +124,7 @@ class EventedMysql < EM::Connection
         #   # log 'mysql errno', @mysql.errno
         # rescue
         #   log 'mysql ping failed'
-        #   @pending << [response, sql, blk]
+        #   @@queue << [response, sql, blk]
         #   return close
         # end
 
@@ -132,13 +133,13 @@ class EventedMysql < EM::Connection
         log 'mysql sending', sql
         @mysql.send_query(sql)
       else
-        @pending << [response, sql, cblk, eblk]
+        @@queue << [response, sql, cblk, eblk]
         return
       end
     rescue Mysql::Error => e
       log 'mysql error', e.message
       if DisconnectErrors.include? e.message
-        @pending << [response, sql, cblk, eblk]
+        @@queue << [response, sql, cblk, eblk]
         return close
       else
         raise e
@@ -146,7 +147,7 @@ class EventedMysql < EM::Connection
     end
 
     log 'queuing', response, sql
-    @queue << [Time.now, response, sql, cblk, eblk]
+    @current = [Time.now, response, sql, cblk, eblk]
   end
   
   def close
@@ -162,7 +163,7 @@ class EventedMysql < EM::Connection
   private
   
   def next_query
-    if @connected and !@processing and pending = @pending.shift
+    if @connected and !@processing and pending = @@queue.shift
       response, sql, cblk, eblk = pending
       execute(sql, response, cblk, eblk)
     end
