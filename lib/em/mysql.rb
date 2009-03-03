@@ -19,14 +19,10 @@ class EventedMysql < EM::Connection
     @connected = true
 
     log 'mysql connected'
+    EM.add_timer(0){ next_query }
   end
   attr_reader :processing, :connected, :opts
   alias :settings :opts
-
-  def connection_completed
-    @connected = true
-    next_query
-  end
 
   DisconnectErrors = [
     'query: not connected',
@@ -110,6 +106,8 @@ class EventedMysql < EM::Connection
       @signature = EM.attach_fd @mysql.socket, true, false
       log 'mysql connected'
       EM.instance_variable_get('@conns')[@signature] = self
+      @connected = true
+      next_query
     end
   end
 
