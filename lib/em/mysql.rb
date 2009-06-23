@@ -69,7 +69,11 @@ class EventedMysql < EM::Connection
     end
   rescue Mysql::Error => e
     log 'mysql error', e.message
-    if DisconnectErrors.include? e.message
+    if e.message =~ /Deadlock/
+      @@queue << [response, sql, cblk, eblk]
+      @processing = false
+      next_query
+    elsif DisconnectErrors.include? e.message
       @@queue << [response, sql, cblk, eblk]
       return close
     elsif cb = (eblk || @opts[:on_error])
