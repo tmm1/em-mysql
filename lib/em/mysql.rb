@@ -1,6 +1,7 @@
 require 'rubygems'
 require 'eventmachine'
 require 'mysqlplus'
+require 'fcntl'
 
 class Mysql
   def result
@@ -19,6 +20,7 @@ class EventedMysql < EM::Connection
     @connected = true
 
     log 'mysql connected'
+    make_socket_blocking
     EM.add_timer(0){ next_query }
   end
   attr_reader :processing, :connected, :opts
@@ -111,6 +113,7 @@ class EventedMysql < EM::Connection
       log 'mysql connected'
       EM.instance_variable_get('@conns')[@signature] = self
       @connected = true
+      make_socket_blocking
       next_query
     end
   end
@@ -159,11 +162,21 @@ class EventedMysql < EM::Connection
     # EM.add_timer(0){ close_connection }
     # close_connection
     fd = detach
+    @io.close if @io
+    @io = nil
     log 'detached fd', fd
   end
 
   private
   
+  def make_socket_blocking
+    if defined?(Fcntl::F_GETFL)
+      @io = IO.for_fd(@mysql.socket)
+      m = @io.fcntl(Fcntl::F_GETFL, 0)
+      @io.fcntl(Fcntl::F_SETFL, ~Fcntl::O_NONBLOCK & m)
+    end
+  end
+
   def next_query
     if @connected and !@processing and pending = @@queue.shift
       response, sql, cblk, eblk = pending
