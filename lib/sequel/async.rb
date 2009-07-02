@@ -106,7 +106,7 @@ module Sequel
         from_self.async_count(&cb)
       else
         clone(STOCK_COUNT_OPTS).async_each{|r|
-          yield r.values.first.to_i
+          yield r.is_a?(Hash) ? r.values.first.to_i : r.values.values.first.to_i
         }
       end
       nil
