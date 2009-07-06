@@ -45,6 +45,9 @@
 #     log "table has #{num_rows} rows"
 #   end
 
+require 'sequel'
+raise 'need Sequel >= 3.2.0' unless Sequel::MAJOR == 3 and Sequel::MINOR >= 2
+
 module Sequel
   class Dataset
     def async_insert *args, &cb
@@ -53,7 +56,7 @@ module Sequel
     end
 
     def async_insert_ignore *args, &cb
-      EventedMysql.insert insert_sql(*args).sub(/insert/i, 'INSERT IGNORE'), &cb
+      EventedMysql.insert insert_ignore.insert_sql(*args), &cb
       nil
     end
 
@@ -73,25 +76,45 @@ module Sequel
     end
 
     def async_multi_insert_ignore *args, &cb
-      EventedMysql.execute multi_insert_sql(*args).first.sub(/insert/i, "INSERT IGNORE"), &cb
+      EventedMysql.execute insert_ignore.multi_insert_sql(*args).first, &cb
+      nil
+    end
+
+    def async_fetch_rows sql, iter = :each
+      EventedMysql.raw(sql) do |m|
+        r = m.result
+
+        i = -1
+        cols = r.fetch_fields.map{|f| [output_identifier(f.name), Sequel::MySQL::MYSQL_TYPES[f.type], i+=1]}
+        @columns = cols.map{|c| c.first}
+        rows = []
+        while row = r.fetch_row
+          h = {}
+          cols.each{|n, p, i| v = row[i]; h[n] = (v && p) ? p.call(v) : v}
+          if iter == :each
+            yield h
+          else
+            rows << h
+          end
+        end
+        yield rows if iter == :all
+      end
       nil
     end
 
     def async_each
-      EventedMysql.select(select_sql) do |rows|
-        rows.each{|r|
-          if row_proc = @row_proc
-            yield row_proc.call(r)
-          else
-            yield r
-          end
-        }
+      async_fetch_rows(select_sql, :each) do |r|
+        if row_proc = @row_proc
+          yield row_proc.call(r)
+        else
+          yield r
+        end
       end
       nil
     end
 
     def async_all
-      EventedMysql.select(sql) do |rows|
+      async_fetch_rows(sql, :all) do |rows|
         if row_proc = @row_proc
           yield(rows.map{|r| row_proc.call(r) })
         else
