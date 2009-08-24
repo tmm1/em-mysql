@@ -20,7 +20,8 @@ class EventedMysql < EM::Connection
     @connected = true
 
     log 'mysql connected'
-    make_socket_blocking
+
+    self.notify_readable = true
     EM.add_timer(0){ next_query }
   end
   attr_reader :processing, :connected, :opts
@@ -109,7 +110,8 @@ class EventedMysql < EM::Connection
       @mysql = EventedMysql._connect @opts
       @fd = @mysql.socket
 
-      @signature = EM.attach_fd @mysql.socket, true, false
+      @signature = EM.attach_fd @mysql.socket, true
+      EM.set_notify_readable @signature, true
       log 'mysql connected'
       EM.instance_variable_get('@conns')[@signature] = self
       @connected = true
@@ -157,25 +159,11 @@ class EventedMysql < EM::Connection
   
   def close
     @connected = false
-    # @mysql.close
-    # IO.pipe
-    # EM.add_timer(0){ close_connection }
-    # close_connection
     fd = detach
-    @io.close if @io
-    @io = nil
     log 'detached fd', fd
   end
 
   private
-  
-  def make_socket_blocking
-    if defined?(Fcntl::F_GETFL)
-      @io = IO.for_fd(@mysql.socket)
-      m = @io.fcntl(Fcntl::F_GETFL, 0)
-      @io.fcntl(Fcntl::F_SETFL, ~Fcntl::O_NONBLOCK & m)
-    end
-  end
 
   def next_query
     if @connected and !@processing and pending = @@queue.shift
@@ -192,12 +180,12 @@ class EventedMysql < EM::Connection
   public
 
   def self.connect opts
-    unless EM.respond_to?(:attach) and Mysql.method_defined?(:socket)
-      raise RuntimeError, 'mysqlplus and EM.attach are required for EventedMysql'
+    unless EM.respond_to?(:watch) and Mysql.method_defined?(:socket)
+      raise RuntimeError, 'mysqlplus and EM.watch are required for EventedMysql'
     end
 
     if conn = _connect(opts)
-      EM.attach conn.socket, self, conn, opts
+      EM.watch conn.socket, self, conn, opts
     else
       EM.add_timer(5){ connect opts }
     end
