@@ -115,7 +115,6 @@ class EventedMysql < EM::Connection
       log 'mysql connected'
       EM.instance_variable_get('@conns')[@signature] = self
       @connected = true
-      make_socket_blocking
       next_query
     end
   end
