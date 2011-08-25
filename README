@@ -1,3 +1,5 @@
+This library is unmaintained. See one of the many forks instead, like em-mysqlplus: https://github.com/igrigorik/em-mysqlplus
+
 Async MySQL driver for Ruby/EventMachine
   (c) 2008 Aman Gupta (tmm1)
 
